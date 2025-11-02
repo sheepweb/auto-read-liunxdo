@@ -1,0 +1,10 @@
+services:
+  autoread:
+    image: 14790897/auto-read:latest
+    container_name: auto-read
+    env_file:
+      - ./.env
+      - ./.env.local
+    restart: unless-stopped 
+    ports:
+      - "7860:7860" 
