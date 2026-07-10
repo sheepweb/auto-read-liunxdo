@@ -81,7 +81,7 @@ const maxConcurrentAccounts = parseInt(process.env.MAX_CONCURRENT_ACCOUNTS) || 3
 const usernames = process.env.USERNAMES.split(",");
 const passwords = process.env.PASSWORDS ? process.env.PASSWORDS.split(",") : [];
 // 读取每个账号对应的Cookie（逗号分隔，与USERNAMES一一对应），有Cookie则跳过表单登录
-const cookiesEnv = process.env.COOKIES ? process.env.COOKIES.split(",") : [];
+const cookiesEnv = parseCookiesEnv(process.env.COOKIES);
 const loginUrl = process.env.WEBSITE || "https://linux.do"; //在GitHub action环境里它不能读取默认环境变量,只能在这里设置默认值
 const delayBetweenInstances = 10000;
 const totalAccounts = usernames.length; // 总的账号数
@@ -291,8 +291,33 @@ function delayClick(time) {
     if (token && chatId) {
       sendToTelegram(`${error.message}`);
     }
+    clearTimeout(shutdownTimer);
+    process.exit(1);
   }
 })();
+
+function parseCookiesEnv(cookiesRaw) {
+  if (!cookiesRaw || !cookiesRaw.trim()) {
+    return [];
+  }
+
+  const trimmed = cookiesRaw.trim();
+  if (trimmed.includes("||")) {
+    return trimmed
+      .split("||")
+      .map((cookie) => cookie.trim())
+      .filter(Boolean);
+  }
+
+  if (trimmed.includes(";") && /(^|;\s*)_t=/.test(trimmed)) {
+    return [trimmed];
+  }
+
+  return trimmed
+    .split(",")
+    .map((cookie) => cookie.trim())
+    .filter(Boolean);
+}
 // 将浏览器Cookie字符串（如 "name=value; name2=value2"）解析为 puppeteer setCookie 所需的对象数组
 function parseCookieString(cookieStr, domain) {
   return cookieStr
@@ -573,12 +598,16 @@ async function launchBrowserForUser(username, password, cookie = null) {
     }
     return { browser };
   } catch (err) {
-    // throw new Error(err);
     console.log("Error in launchBrowserForUser:", err);
     if (token && chatId) {
       sendToTelegram(`${err.message}`);
     }
-    return { browser }; // 错误时仍然返回 browser
+    if (browser) {
+      await browser.close().catch((closeError) => {
+        console.error("Error closing browser after launch failure:", closeError);
+      });
+    }
+    throw err;
   }
 }
 async function login(page, username, password, retryCount = 3) {
