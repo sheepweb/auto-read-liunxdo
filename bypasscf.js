@@ -5,6 +5,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import readline from "readline";
 import TelegramBot from "node-telegram-bot-api";
 import fetch from "node-fetch";
 import { parseStringPromise } from "xml2js";
@@ -56,6 +57,8 @@ if (fs.existsSync(".env.local")) {
     "Using .env file to supply config environment variables, you can create a .env.local file to overwrite defaults, it doesn't upload to git"
   );
 }
+
+await promptForTCookieOverride();
 
 // 读取以分钟为单位的运行时间限制
 const runTimeLimitMinutes = process.env.RUN_TIME_LIMIT_MINUTES || 20;
@@ -317,6 +320,60 @@ function parseCookiesEnv(cookiesRaw) {
     .split(",")
     .map((cookie) => cookie.trim())
     .filter(Boolean);
+}
+
+async function promptForTCookieOverride() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return;
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const answer = await new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+
+    const timer = setTimeout(() => {
+      console.log("\n10 秒内未输入 _t，继续使用当前环境变量。");
+      finish("");
+    }, 10000);
+
+    rl.question("请输入 _t 的值（回车跳过，10 秒超时）：", finish);
+  });
+
+  rl.close();
+
+  const cookie = normalizeTCookieInput(answer);
+  if (cookie) {
+    process.env.COOKIES = cookie;
+    console.log("已使用当前输入的 _t 值。");
+  } else if (answer !== "") {
+    console.log("输入为空，继续使用当前环境变量。");
+  }
+}
+
+function normalizeTCookieInput(input) {
+  const trimmed = (input || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const tCookieMatch = trimmed.match(/(?:^|;\s*)_t=([^;]+)/);
+  if (tCookieMatch) {
+    return `_t=${tCookieMatch[1].trim()}`;
+  }
+
+  return `_t=${trimmed}`;
 }
 // 将浏览器Cookie字符串（如 "name=value; name2=value2"）解析为 puppeteer setCookie 所需的对象数组
 function parseCookieString(cookieStr, domain) {
