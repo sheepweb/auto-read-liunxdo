@@ -27,7 +27,7 @@
     "https://community.openai.com",
     "https://idcflare.com/",
   ];
-  const commentLimit = 1000;
+  const commentLimit = 100;
   const topicListLimit = 100;
   const likeLimit = 50;
   // 获取当前页面的URL
